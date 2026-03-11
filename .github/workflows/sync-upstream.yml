@@ -1,0 +1,62 @@
+name: Sync from upstream
+
+on:
+  schedule:
+    # Check for upstream changes weekly (Sunday 02:00 UTC)
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/badlogic/pi-mono.git || true
+
+      - name: Fetch upstream
+        run: git fetch upstream main
+
+      - name: Check for new upstream commits
+        id: check
+        run: |
+          BEHIND=$(git rev-list HEAD..upstream/main --count)
+          echo "behind=$BEHIND" >> $GITHUB_OUTPUT
+          echo "Upstream is $BEHIND commits ahead"
+
+      - name: Create sync branch and PR
+        if: steps.check.outputs.behind != '0'
+        run: |
+          BRANCH="sync/upstream-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git merge upstream/main --no-edit --strategy-option=ours || true
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "chore: sync from upstream badlogic/pi-mono ($(date +%Y-%m-%d))" \
+            --body "Automated sync of ${{ steps.check.outputs.behind }} upstream commits.
+
+          Review and resolve any conflicts, then merge.
+          Our patches (OAuth timeout, input paste fix) are on separate commits and should survive the merge cleanly.
+
+          Upstream: https://github.com/badlogic/pi-mono/compare/main...$(git rev-parse upstream/main)" \
+            --head "$BRANCH" \
+            --base main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: No new upstream commits
+        if: steps.check.outputs.behind == '0'
+        run: echo "Already up to date with upstream."

@@ -1,0 +1,56 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+-cwilson613*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print what would publish, do not actually publish)'
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build --workspaces --if-present
+
+      - name: Publish @cwilson613/pi-agent-core
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        working-directory: packages/agent
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @cwilson613/pi-ai
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        working-directory: packages/ai
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @cwilson613/pi-tui
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        working-directory: packages/tui
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @cwilson613/pi-coding-agent
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        working-directory: packages/coding-agent
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

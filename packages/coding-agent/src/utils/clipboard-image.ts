@@ -81,6 +81,49 @@ async function convertToPng(bytes: Uint8Array): Promise<Uint8Array | null> {
 	}
 }
 
+/**
+ * Resize an image so its longest side is at most maxDimension pixels.
+ * Returns the original bytes unchanged if Photon is unavailable, the image
+ * is already small enough, or an error occurs.
+ *
+ * Output is always PNG regardless of input format.
+ */
+async function resizeIfNeeded(
+	bytes: Uint8Array,
+	maxDimension = 1568,
+): Promise<{ bytes: Uint8Array; mimeType: string }> {
+	const photon = await loadPhoton();
+	if (!photon) {
+		return { bytes, mimeType: "image/png" };
+	}
+
+	let image: InstanceType<(typeof photon)["PhotonImage"]> | null = null;
+	try {
+		image = photon.PhotonImage.new_from_byteslice(bytes);
+		const w = image.get_width();
+		const h = image.get_height();
+
+		if (w <= maxDimension && h <= maxDimension) {
+			return { bytes: image.get_bytes(), mimeType: "image/png" };
+		}
+
+		const scale = maxDimension / Math.max(w, h);
+		const newW = Math.max(1, Math.round(w * scale));
+		const newH = Math.max(1, Math.round(h * scale));
+
+		const resized = photon.resize(image, newW, newH, photon.SamplingFilter.Lanczos3);
+		try {
+			return { bytes: resized.get_bytes(), mimeType: "image/png" };
+		} finally {
+			resized.free();
+		}
+	} catch {
+		return { bytes, mimeType: "image/png" };
+	} finally {
+		image?.free();
+	}
+}
+
 function runCommand(
 	command: string,
 	args: string[],
@@ -200,8 +243,11 @@ export async function readClipboardImage(options?: {
 		if (!pngBytes) {
 			return null;
 		}
-		return { bytes: pngBytes, mimeType: "image/png" };
+		image = { bytes: pngBytes, mimeType: "image/png" };
 	}
 
-	return image;
+	// Resize to max 1568px on the longest side so large screenshots don't
+	// exceed API payload limits or bloat every subsequent history request.
+	const resized = await resizeIfNeeded(image.bytes);
+	return { bytes: resized.bytes, mimeType: resized.mimeType };
 }

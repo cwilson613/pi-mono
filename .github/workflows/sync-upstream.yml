@@ -2,8 +2,8 @@ name: Sync from upstream
 
 on:
   schedule:
-    # Check for upstream changes weekly (Sunday 02:00 UTC)
-    - cron: '0 2 * * 0'
+    # Check for upstream changes daily at 03:00 UTC
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 jobs:
@@ -33,30 +33,74 @@ jobs:
         id: check
         run: |
           BEHIND=$(git rev-list HEAD..upstream/main --count)
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
           echo "behind=$BEHIND" >> $GITHUB_OUTPUT
-          echo "Upstream is $BEHIND commits ahead"
+          echo "upstream_sha=$UPSTREAM_SHA" >> $GITHUB_OUTPUT
+          echo "Upstream is $BEHIND commits ahead ($(git rev-parse --short upstream/main))"
 
-      - name: Create sync branch and PR
+      - name: Check if sync PR already exists
+        id: pr_check
         if: steps.check.outputs.behind != '0'
         run: |
-          BRANCH="sync/upstream-$(date +%Y%m%d)"
+          EXISTING=$(gh pr list --base main --head "sync/upstream-*" --state open --json number --jq '.[0].number // ""')
+          echo "existing_pr=$EXISTING" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create sync branch and PR
+        if: steps.check.outputs.behind != '0' && steps.pr_check.outputs.existing_pr == ''
+        run: |
+          BRANCH="sync/upstream-$(date +%Y%m%d-%H%M)"
+          UPSTREAM_SHA="${{ steps.check.outputs.upstream_sha }}"
+          BEHIND="${{ steps.check.outputs.behind }}"
+
           git checkout -b "$BRANCH"
-          git merge upstream/main --no-edit --strategy-option=ours || true
+
+          # Attempt a real merge — do NOT use --strategy-option=ours.
+          # If it fails with conflicts, commit the conflict markers so the PR
+          # shows exactly what needs human attention. Never silently drop upstream.
+          if git merge upstream/main --no-edit; then
+            MERGE_STATUS="✅ Clean merge — no conflicts."
+          else
+            # Stage conflict markers and create a WIP commit
+            git add -A
+            git commit -m "chore: sync upstream [has conflicts — resolve before merging]"
+            MERGE_STATUS="⚠️  **Merge has conflicts.** Resolve conflict markers before merging this PR."
+          fi
+
           git push origin "$BRANCH"
+
+          # Get the short log of new upstream commits
+          COMMIT_LOG=$(git log HEAD..upstream/main --oneline 2>/dev/null || git log "$(git merge-base HEAD upstream/main)..upstream/main" --oneline | head -20)
 
           gh pr create \
             --title "chore: sync from upstream badlogic/pi-mono ($(date +%Y-%m-%d))" \
-            --body "Automated sync of ${{ steps.check.outputs.behind }} upstream commits.
+            --body "Automated sync of **${BEHIND} upstream commit(s)** into our patched fork.
 
-          Review and resolve any conflicts, then merge.
-          Our patches (OAuth timeout, input paste fix) are on separate commits and should survive the merge cleanly.
+          $MERGE_STATUS
 
-          Upstream: https://github.com/badlogic/pi-mono/compare/main...$(git rev-parse upstream/main)" \
+          ### New upstream commits
+          \`\`\`
+          ${COMMIT_LOG}
+          \`\`\`
+
+          ### What to check before merging
+          - Confirm our patches still apply cleanly: \`packages/ai/src/utils/oauth/fetch-utils.ts\` and \`packages/tui/src/components/input.ts\`
+          - If upstream also touched those files, manual reconciliation is required
+          - Run \`npm run build && npm test\` after resolving any conflicts
+
+          Upstream HEAD: [\`$(git rev-parse --short upstream/main)\`](https://github.com/badlogic/pi-mono/commit/${UPSTREAM_SHA})" \
             --head "$BRANCH" \
             --base main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: No new upstream commits
+      - name: Update existing PR (new commits since last sync)
+        if: steps.check.outputs.behind != '0' && steps.pr_check.outputs.existing_pr != ''
+        run: |
+          echo "Open sync PR #${{ steps.pr_check.outputs.existing_pr }} already exists — skipping duplicate."
+          echo "New upstream commits since PR was opened: ${{ steps.check.outputs.behind }}"
+
+      - name: Already up to date
         if: steps.check.outputs.behind == '0'
-        run: echo "Already up to date with upstream."
+        run: echo "Already up to date with upstream. Nothing to sync."

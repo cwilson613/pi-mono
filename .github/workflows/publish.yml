@@ -14,10 +14,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: npm-publish   # npm trusted publisher requires a named environment
     permissions:
       contents: read
-      id-token: write          # required for OIDC token exchange with npm
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +24,7 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          # No NODE_AUTH_TOKEN — OIDC handles authentication
+
 
       - name: Install dependencies
         run: npm ci
@@ -36,25 +34,25 @@ jobs:
 
       # Publish in dependency order: agent-core → ai → tui → coding-agent
       - name: Publish @cwilson613/pi-agent-core
-        run: |
-          npm publish --access public --provenance \
-            ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
         working-directory: packages/agent
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @cwilson613/pi-ai
-        run: |
-          npm publish --access public --provenance \
-            ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
         working-directory: packages/ai
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @cwilson613/pi-tui
-        run: |
-          npm publish --access public --provenance \
-            ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
         working-directory: packages/tui
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @cwilson613/pi-coding-agent
-        run: |
-          npm publish --access public --provenance \
-            ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish --access public ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
         working-directory: packages/coding-agent
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

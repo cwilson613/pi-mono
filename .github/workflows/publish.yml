@@ -6,6 +6,10 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+-cwilson613*'
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Fork version to publish (e.g. 0.57.1-cwilson613.2). Overrides tag and package.json.'
+        type: string
+        required: false
       dry_run:
         description: 'Dry run (print what would publish, do not actually publish)'
         type: boolean
@@ -25,18 +29,30 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Extract version from tag
+      - name: Resolve target version
         id: version
         run: |
-          # On a tag push, GITHUB_REF_NAME is e.g. "v0.57.1-cwilson613.2"
-          # On workflow_dispatch there is no tag — use what's already in package.json
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+          # Priority: explicit input > git tag > package.json
+          if [[ -n "${{ inputs.version }}" ]]; then
+            FORK_VER="${{ inputs.version }}"
+            echo "Source: workflow_dispatch input"
+          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             FORK_VER="${GITHUB_REF_NAME#v}"
+            echo "Source: git tag ($GITHUB_REF_NAME)"
           else
             FORK_VER=$(node -p "require('./packages/coding-agent/package.json').version")
+            echo "Source: package.json (fallback)"
           fi
+
           echo "fork_version=$FORK_VER" >> $GITHUB_OUTPUT
           echo "Publishing version: $FORK_VER"
+
+          # Sanity check: refuse to overwrite a version already on npm
+          PUBLISHED=$(npm view "@cwilson613/pi-coding-agent@$FORK_VER" version 2>/dev/null || true)
+          if [[ -n "$PUBLISHED" && "${{ inputs.dry_run }}" != "true" ]]; then
+            echo "::error::Version $FORK_VER is already published on npm. Bump the version before publishing."
+            exit 1
+          fi
 
       - name: Stamp version into all packages
         run: |
@@ -98,4 +114,4 @@ jobs:
           echo "- \`@cwilson613/pi-agent-core\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`@cwilson613/pi-coding-agent\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: \`$GITHUB_REF_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "Ref: \`$GITHUB_REF_NAME\`" >> $GITHUB_STEP_SUMMARY

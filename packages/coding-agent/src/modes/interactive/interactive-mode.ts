@@ -1151,7 +1151,32 @@ export class InteractiveMode {
 	private getRegisteredToolDefinition(toolName: string) {
 		const tools = this.session.extensionRunner?.getAllRegisteredTools() ?? [];
 		const registeredTool = tools.find((t) => t.definition.name === toolName);
-		return registeredTool?.definition;
+		const definition = registeredTool?.definition;
+
+		// Check for standalone tool renderers (e.g. for built-in tools)
+		const standaloneRenderers = this.session.extensionRunner?.getToolRenderers(toolName);
+		if (standaloneRenderers) {
+			if (definition) {
+				// Merge standalone renderers into the existing definition (standalone wins)
+				return {
+					...definition,
+					renderCall: standaloneRenderers.renderCall ?? definition.renderCall,
+					renderResult: standaloneRenderers.renderResult ?? definition.renderResult,
+				};
+			}
+			// No tool definition at all — create a minimal one with just renderers
+			return {
+				name: toolName,
+				label: toolName,
+				description: "",
+				parameters: {} as any,
+				execute: (() => {}) as any,
+				renderCall: standaloneRenderers.renderCall,
+				renderResult: standaloneRenderers.renderResult,
+			};
+		}
+
+		return definition;
 	}
 
 	/**

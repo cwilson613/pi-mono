@@ -11,7 +11,7 @@
     "clean": "shx rm -rf dist"
   },
   "dependencies": {
-    "@cwilson613/mini-lit": "^0.2.0",
+    "@mariozechner/mini-lit": "^0.2.0",
     "@cwilson613/pi-ai": "file:../../ai",
     "@cwilson613/pi-web-ui": "file:../",
     "@tailwindcss/vite": "^4.1.17",

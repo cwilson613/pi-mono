@@ -1,6 +1,6 @@
-import { defaultEnglish, defaultGerman, type MiniLitRequiredMessages, setTranslations } from "@cwilson613/mini-lit";
+import { defaultEnglish, defaultGerman, type MiniLitRequiredMessages, setTranslations } from "@mariozechner/mini-lit";
 
-declare module "@cwilson613/mini-lit" {
+declare module "@mariozechner/mini-lit" {
 	interface i18nMessages extends MiniLitRequiredMessages {
 		Free: string;
 		"Input Required": string;
@@ -650,4 +650,4 @@ export const translations = {
 
 setTranslations(translations);
 
-export * from "@cwilson613/mini-lit/dist/i18n.js";
+export * from "@mariozechner/mini-lit/dist/i18n.js";

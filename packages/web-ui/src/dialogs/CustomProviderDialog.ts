@@ -1,9 +1,9 @@
-import { i18n } from "@cwilson613/mini-lit";
-import { Button } from "@cwilson613/mini-lit/dist/Button.js";
-import { DialogBase } from "@cwilson613/mini-lit/dist/DialogBase.js";
-import { Input } from "@cwilson613/mini-lit/dist/Input.js";
-import { Label } from "@cwilson613/mini-lit/dist/Label.js";
-import { Select } from "@cwilson613/mini-lit/dist/Select.js";
+import { i18n } from "@mariozechner/mini-lit";
+import { Button } from "@mariozechner/mini-lit/dist/Button.js";
+import { DialogBase } from "@mariozechner/mini-lit/dist/DialogBase.js";
+import { Input } from "@mariozechner/mini-lit/dist/Input.js";
+import { Label } from "@mariozechner/mini-lit/dist/Label.js";
+import { Select } from "@mariozechner/mini-lit/dist/Select.js";
 import type { Model } from "@cwilson613/pi-ai";
 import { html, type TemplateResult } from "lit";
 import { state } from "lit/decorators.js";

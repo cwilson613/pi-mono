@@ -1,4 +1,4 @@
-import { Alert } from "@cwilson613/mini-lit/dist/Alert.js";
+import { Alert } from "@mariozechner/mini-lit/dist/Alert.js";
 import type { Message } from "@cwilson613/pi-ai";
 import type { AgentMessage, MessageRenderer } from "@cwilson613/pi-web-ui";
 import { defaultConvertToLlm, registerMessageRenderer } from "@cwilson613/pi-web-ui";

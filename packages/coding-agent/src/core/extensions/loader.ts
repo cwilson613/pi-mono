@@ -1,7 +1,7 @@
 /**
  * Extension loader - loads TypeScript extension modules using jiti.
  *
- * Uses @cwilson613/jiti fork with virtualModules support for compiled Bun binaries.
+ * Uses @mariozechner/jiti fork with virtualModules support for compiled Bun binaries.
  */
 
 import * as fs from "node:fs";
@@ -9,11 +9,11 @@ import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJiti } from "@cwilson613/jiti";
+import { createJiti } from "@mariozechner/jiti";
 import * as _bundledPiAgentCore from "@cwilson613/pi-agent-core";
 import * as _bundledPiAi from "@cwilson613/pi-ai";
 import * as _bundledPiAiOauth from "@cwilson613/pi-ai/oauth";
-import type { KeyId } from "@cwilson613/pi-tui";
+import type { Component, KeyId } from "@cwilson613/pi-tui";
 import * as _bundledPiTui from "@cwilson613/pi-tui";
 // Static imports of packages that extensions may use.
 // These MUST be static so Bun bundles them into the compiled binary.
@@ -23,10 +23,12 @@ import { getAgentDir, isBunBinary } from "../../config.js";
 // NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
 // avoiding a circular dependency. Extensions can import from @cwilson613/pi-coding-agent.
 import * as _bundledPiCodingAgent from "../../index.js";
+import type { Theme } from "../../modes/interactive/theme/theme.js";
 import { createEventBus, type EventBus } from "../event-bus.js";
 import type { ExecOptions } from "../exec.js";
 import { execCommand } from "../exec.js";
 import type {
+	AgentToolResult,
 	Extension,
 	ExtensionAPI,
 	ExtensionFactory,
@@ -36,6 +38,7 @@ import type {
 	ProviderConfig,
 	RegisteredCommand,
 	ToolDefinition,
+	ToolRenderResultOptions,
 } from "./types.js";
 
 /** Modules available to extensions via virtualModules (for compiled Bun binary) */
@@ -179,6 +182,20 @@ function createExtensionAPI(
 			runtime.refreshTools();
 		},
 
+		registerToolRenderer(
+			toolName: string,
+			renderers: {
+				renderCall?: (args: any, theme: Theme) => Component | undefined;
+				renderResult?: (
+					result: AgentToolResult<any>,
+					options: ToolRenderResultOptions,
+					theme: Theme,
+				) => Component | undefined;
+			},
+		): void {
+			extension.toolRenderers.set(toolName, renderers);
+		},
+
 		registerCommand(name: string, options: Omit<RegisteredCommand, "name">): void {
 			extension.commands.set(name, { name, ...options });
 		},
@@ -307,6 +324,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		resolvedPath,
 		handlers: new Map(),
 		tools: new Map(),
+		toolRenderers: new Map(),
 		messageRenderers: new Map(),
 		commands: new Map(),
 		flags: new Map(),

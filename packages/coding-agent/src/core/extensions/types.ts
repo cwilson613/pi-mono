@@ -999,6 +999,22 @@ export interface ExtensionAPI {
 	/** Register a tool that the LLM can call. */
 	registerTool<TParams extends TSchema = TSchema, TDetails = unknown>(tool: ToolDefinition<TParams, TDetails>): void;
 
+	/**
+	 * Attach custom renderers to an existing tool (including built-in tools)
+	 * without replacing the tool itself.
+	 */
+	registerToolRenderer(
+		toolName: string,
+		renderers: {
+			renderCall?: (args: any, theme: Theme) => Component | undefined;
+			renderResult?: (
+				result: AgentToolResult<any>,
+				options: ToolRenderResultOptions,
+				theme: Theme,
+			) => Component | undefined;
+		},
+	): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -1385,6 +1401,7 @@ export interface Extension {
 	resolvedPath: string;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
+	toolRenderers: Map<string, { renderCall?: (...args: any[]) => any; renderResult?: (...args: any[]) => any }>;
 	messageRenderers: Map<string, MessageRenderer>;
 	commands: Map<string, RegisteredCommand>;
 	flags: Map<string, ExtensionFlag>;

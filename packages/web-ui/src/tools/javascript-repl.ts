@@ -1,4 +1,4 @@
-import { i18n } from "@cwilson613/mini-lit";
+import { i18n } from "@mariozechner/mini-lit";
 import type { AgentTool } from "@cwilson613/pi-agent-core";
 import type { ToolResultMessage } from "@cwilson613/pi-ai";
 import { type Static, Type } from "@sinclair/typebox";

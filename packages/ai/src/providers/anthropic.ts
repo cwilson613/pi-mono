@@ -677,6 +677,24 @@ function normalizeToolCallId(id: string): string {
 	return id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
 }
 
+/**
+ * Find the index of the last user message that contains at least one image
+ * block in the (already-transformed) message list.
+ */
+function lastUserMessageWithImageIndex(messages: Message[]): number {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i];
+		if (
+			msg.role === "user" &&
+			Array.isArray(msg.content) &&
+			msg.content.some((c) => c.type === "image")
+		) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 function convertMessages(
 	messages: Message[],
 	model: Model<"anthropic-messages">,
@@ -687,6 +705,11 @@ function convertMessages(
 
 	// Transform messages for cross-provider compatibility
 	const transformedMessages = transformMessages(messages, model, normalizeToolCallId);
+
+	// Strip images from every user message except the most recent one that
+	// contains images. This prevents large screenshots from being re-sent on
+	// every subsequent request and bloating history payloads.
+	const lastImageMsgIdx = lastUserMessageWithImageIndex(transformedMessages);
 
 	for (let i = 0; i < transformedMessages.length; i++) {
 		const msg = transformedMessages[i];
@@ -700,23 +723,32 @@ function convertMessages(
 					});
 				}
 			} else {
-				const blocks: ContentBlockParam[] = msg.content.map((item) => {
+				// Strip images from historical messages — only keep them on the
+				// most recent user message that included an image.
+				const stripImages = i !== lastImageMsgIdx;
+
+				const blocks: ContentBlockParam[] = [];
+				for (const item of msg.content) {
 					if (item.type === "text") {
-						return {
-							type: "text",
+						blocks.push({
+							type: "text" as const,
 							text: sanitizeSurrogates(item.text),
-						};
-					} else {
-						return {
-							type: "image",
+						});
+					} else if (!stripImages) {
+						blocks.push({
+							type: "image" as const,
 							source: {
-								type: "base64",
-								media_type: item.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+								type: "base64" as const,
+								media_type: item.mimeType as
+									| "image/jpeg"
+									| "image/png"
+									| "image/gif"
+									| "image/webp",
 								data: item.data,
 							},
-						};
+						});
 					}
-				});
+				}
 				let filteredBlocks = !model?.input.includes("image") ? blocks.filter((b) => b.type !== "image") : blocks;
 				filteredBlocks = filteredBlocks.filter((b) => {
 					if (b.type === "text") {

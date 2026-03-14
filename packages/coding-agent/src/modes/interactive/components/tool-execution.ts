@@ -25,6 +25,65 @@ import { truncateToVisualLines } from "./visual-truncate.js";
 
 // Preview line limit for bash when not expanded
 const BASH_PREVIEW_LINES = 5;
+
+// Shell builtins and common top-level commands to highlight as keywords
+const SHELL_KEYWORDS = new Set([
+	"cd", "export", "unset", "source", ".", "exec", "eval", "echo", "printf",
+	"read", "set", "shift", "return", "if", "then", "else", "elif", "fi",
+	"for", "do", "done", "while", "until", "case", "esac", "function",
+	"exit", "kill", "wait", "trap", "jobs", "fg", "bg", "true", "false",
+]);
+
+/**
+ * Apply syntax highlighting to a bash command string.
+ * Tokenizes: shell keywords, flags (--flag, -f), quoted strings,
+ * operators (|, &&, ||, ;, >, >>), and file paths.
+ */
+function highlightBashCommand(command: string): string {
+	const parts: string[] = [];
+	const tokenRe =
+		/("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(&&|\|\||>>|[|&;><])|(--?[a-zA-Z0-9][-a-zA-Z0-9_]*)|(~?\/[^\s;|&><"']*|\.\.?\/[^\s;|&><"']*)|([^\s;|&><"']+)/g;
+
+	let lastIndex = 0;
+	let isFirstToken = true;
+
+	for (let match = tokenRe.exec(command); match !== null; match = tokenRe.exec(command)) {
+		if (match.index > lastIndex) {
+			parts.push(command.slice(lastIndex, match.index));
+		}
+		lastIndex = tokenRe.lastIndex;
+
+		const [, dquote, squote, operator, flag, filepath, word] = match;
+
+		if (dquote || squote) {
+			parts.push(theme.fg("syntaxString", dquote ?? squote ?? ""));
+		} else if (operator) {
+			parts.push(theme.fg("syntaxOperator", operator));
+			isFirstToken = true;
+		} else if (flag) {
+			parts.push(theme.fg("warning", flag));
+		} else if (filepath) {
+			parts.push(theme.fg("accent", filepath));
+		} else if (word) {
+			if (isFirstToken) {
+				const isKeyword = SHELL_KEYWORDS.has(word);
+				parts.push(isKeyword ? theme.fg("syntaxKeyword", word) : theme.fg("toolTitle", word));
+				isFirstToken = false;
+			} else if (SHELL_KEYWORDS.has(word)) {
+				parts.push(theme.fg("syntaxKeyword", word));
+			} else {
+				parts.push(theme.fg("toolOutput", word));
+			}
+		}
+	}
+
+	if (lastIndex < command.length) {
+		parts.push(command.slice(lastIndex));
+	}
+
+	return parts.join("");
+}
+
 // During partial write tool-call streaming, re-highlight the first N lines fully
 // to keep multiline tokenization mostly correct without re-highlighting the full file.
 const WRITE_PARTIAL_FULL_HIGHLIGHT_LINES = 50;
@@ -99,6 +158,9 @@ export class ToolExecutionComponent extends Container {
 	// Cached edit diff preview (computed when args arrive, before tool executes)
 	private editDiffPreview?: EditDiffResult | EditDiffError;
 	private editDiffArgsKey?: string; // Track which args the preview is for
+	// Execution timing — set when args are complete, used to compute duration
+	private execStartTime?: number;
+	private execDurationMs?: number;
 	// Cached converted images for Kitty protocol (which requires PNG), keyed by index
 	private convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
 	// Incremental syntax highlighting cache for write tool call args
@@ -252,9 +314,10 @@ export class ToolExecutionComponent extends Container {
 
 	/**
 	 * Signal that args are complete (tool is about to execute).
-	 * This triggers diff computation for edit tool.
+	 * This triggers diff computation for edit tool and starts the execution timer.
 	 */
 	setArgsComplete(): void {
+		this.execStartTime = Date.now();
 		if (this.toolName === "write") {
 			const rawPath = str(this.args?.file_path ?? this.args?.path);
 			const fileContent = str(this.args?.content);
@@ -308,6 +371,11 @@ export class ToolExecutionComponent extends Container {
 	): void {
 		this.result = result;
 		this.isPartial = isPartial;
+		// Capture duration when result first arrives (not on partial updates)
+		if (!isPartial && this.execDurationMs === undefined) {
+			this.execDurationMs = result.details?.durationMs ??
+				(this.execStartTime !== undefined ? Date.now() - this.execStartTime : undefined);
+		}
 		if (this.toolName === "write" && !isPartial) {
 			const rawPath = str(this.args?.file_path ?? this.args?.path);
 			const fileContent = str(this.args?.content);
@@ -502,6 +570,15 @@ export class ToolExecutionComponent extends Container {
 		}
 	}
 
+	/** Format a duration in ms to a concise human-readable string. */
+	private static formatDuration(ms: number): string {
+		if (ms < 1000) return `${ms}ms`;
+		if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+		const m = Math.floor(ms / 60000);
+		const s = Math.round((ms % 60000) / 1000);
+		return s > 0 ? `${m}m${s}s` : `${m}m`;
+	}
+
 	/**
 	 * Render bash content using visual line truncation (like bash-execution.ts)
 	 */
@@ -509,13 +586,67 @@ export class ToolExecutionComponent extends Container {
 		const command = str(this.args?.command);
 		const timeout = this.args?.timeout as number | undefined;
 
-		// Header
-		const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
+		// Header — syntax-highlight the command
 		const commandDisplay =
-			command === null ? theme.fg("error", "[invalid arg]") : command ? command : theme.fg("toolOutput", "...");
-		this.contentBox.addChild(
-			new Text(theme.fg("toolTitle", theme.bold(`$ ${commandDisplay}`)) + timeoutSuffix, 0, 0),
-		);
+			command === null
+				? theme.fg("error", "[invalid arg]")
+				: command
+					? highlightBashCommand(command)
+					: theme.fg("toolOutput", "...");
+		const promptGlyph = theme.fg("syntaxOperator", "$");
+		this.contentBox.addChild(new Text(`${promptGlyph} ${commandDisplay}`, 0, 0));
+
+		// Metadata line: cwd · duration · exit code (or timeout)
+		{
+			const sep = theme.fg("dim", " · ");
+			const cwdDisplay = theme.fg("dim", shortenPath(this.cwd));
+
+			let metaParts = cwdDisplay;
+
+			if (this.result && !this.isPartial) {
+				// Duration
+				const durMs = this.execDurationMs;
+				if (durMs !== undefined) {
+					metaParts += sep + theme.fg("muted", ToolExecutionComponent.formatDuration(durMs));
+				}
+
+				// Exit code / error type
+				if (this.result.isError) {
+					const output = this.getTextOutput();
+					const exitMatch = output.match(/Command exited with code (\d+)/);
+					const timedOut = output.includes("timed out after");
+					const aborted = output.includes("Command aborted");
+
+					if (timedOut) {
+						const ts = timeout ? ` ${timeout}s` : "";
+						metaParts += sep + theme.fg("error", `timeout${ts}`);
+					} else if (aborted) {
+						metaParts += sep + theme.fg("warning", "aborted");
+					} else if (exitMatch) {
+						metaParts += sep + theme.fg("error", `exit ${exitMatch[1]}`);
+					}
+				} else {
+					const exitCode = this.result.details?.exitCode;
+					if (exitCode === 0) {
+						metaParts += sep + theme.fg("success", "exit 0");
+					}
+				}
+
+				if (timeout && !this.result.isError) {
+					// Show timeout budget remaining hint only for long commands
+					const durMs2 = this.execDurationMs ?? 0;
+					if (durMs2 > timeout * 800) {
+						// used >80% of timeout budget
+						metaParts += sep + theme.fg("warning", `~${timeout}s limit`);
+					}
+				}
+			} else if (this.isPartial && timeout) {
+				metaParts += sep + theme.fg("muted", `timeout ${timeout}s`);
+			}
+
+			this.contentBox.addChild(new Text(metaParts, 0, 0));
+		}
+
 
 		if (this.result) {
 			const output = this.getTextOutput().trim();

@@ -1,6 +1,6 @@
-import { icon } from "@cwilson613/mini-lit";
-import { Button } from "@cwilson613/mini-lit/dist/Button.js";
-import { Select, type SelectOption } from "@cwilson613/mini-lit/dist/Select.js";
+import { icon } from "@mariozechner/mini-lit";
+import { Button } from "@mariozechner/mini-lit/dist/Button.js";
+import { Select, type SelectOption } from "@mariozechner/mini-lit/dist/Select.js";
 import type { Model } from "@cwilson613/pi-ai";
 import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";

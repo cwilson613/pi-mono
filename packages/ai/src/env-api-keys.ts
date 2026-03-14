@@ -65,7 +65,10 @@ export function getEnvApiKey(provider: string): string | undefined;
 export function getEnvApiKey(provider: any): string | undefined {
 	// Fall back to environment variables
 	if (provider === "github-copilot") {
-		return process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+		// Only COPILOT_GITHUB_TOKEN is a genuine copilot credential.
+		// GH_TOKEN/GITHUB_TOKEN are general GitHub API tokens (from gh auth login)
+		// that return 401/403 on api.individual.githubcopilot.com.
+		return process.env.COPILOT_GITHUB_TOKEN;
 	}
 
 	// ANTHROPIC_OAUTH_TOKEN takes precedence over ANTHROPIC_API_KEY

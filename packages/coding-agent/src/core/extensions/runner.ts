@@ -333,6 +333,19 @@ export class ExtensionRunner {
 		return undefined;
 	}
 
+	/** Get standalone tool renderers registered via registerToolRenderer. */
+	getToolRenderers(
+		toolName: string,
+	): { renderCall?: (...args: any[]) => any; renderResult?: (...args: any[]) => any } | undefined {
+		for (const ext of this.extensions) {
+			const renderer = ext.toolRenderers.get(toolName);
+			if (renderer) {
+				return renderer;
+			}
+		}
+		return undefined;
+	}
+
 	getFlags(): Map<string, ExtensionFlag> {
 		const allFlags = new Map<string, ExtensionFlag>();
 		for (const ext of this.extensions) {

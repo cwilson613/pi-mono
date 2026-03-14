@@ -8,12 +8,7 @@
  * - Interact with the user via UI primitives
  */
 
-import type {
-	AgentMessage,
-	AgentToolResult,
-	AgentToolUpdateCallback,
-	ThinkingLevel,
-} from "@cwilson613/pi-agent-core";
+import type { AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLevel } from "@cwilson613/pi-agent-core";
 import type {
 	Api,
 	AssistantMessageEvent,
@@ -999,6 +994,26 @@ export interface ExtensionAPI {
 	/** Register a tool that the LLM can call. */
 	registerTool<TParams extends TSchema = TSchema, TDetails = unknown>(tool: ToolDefinition<TParams, TDetails>): void;
 
+	/**
+	 * Attach custom renderers to an existing tool (including built-in tools).
+	 * Unlike registerTool, this does NOT replace the tool — it only controls
+	 * how the tool call/result appears in the conversation window.
+	 *
+	 * If the tool already has renderers (from registerTool or a previous
+	 * registerToolRenderer call), this replaces them.
+	 */
+	registerToolRenderer(
+		toolName: string,
+		renderers: {
+			renderCall?: (args: any, theme: Theme) => Component | undefined;
+			renderResult?: (
+				result: AgentToolResult<any>,
+				options: ToolRenderResultOptions,
+				theme: Theme,
+			) => Component | undefined;
+		},
+	): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -1380,11 +1395,22 @@ export interface ExtensionCommandContextActions {
 export interface ExtensionRuntime extends ExtensionRuntimeState, ExtensionActions {}
 
 /** Loaded extension with all registered items. */
+/** Standalone renderers for tools (including built-in tools) registered via registerToolRenderer. */
+export interface ToolRendererEntry {
+	renderCall?: (args: any, theme: Theme) => Component | undefined;
+	renderResult?: (
+		result: AgentToolResult<any>,
+		options: ToolRenderResultOptions,
+		theme: Theme,
+	) => Component | undefined;
+}
+
 export interface Extension {
 	path: string;
 	resolvedPath: string;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
+	toolRenderers: Map<string, ToolRendererEntry>;
 	messageRenderers: Map<string, MessageRenderer>;
 	commands: Map<string, RegisteredCommand>;
 	flags: Map<string, ExtensionFlag>;

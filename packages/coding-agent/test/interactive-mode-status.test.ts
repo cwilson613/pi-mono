@@ -1,6 +1,6 @@
 import { Container } from "@cwilson613/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
-import { InteractiveMode } from "../src/modes/interactive/interactive-mode.js";
+import { InteractiveMode, isVersionNewer } from "../src/modes/interactive/interactive-mode.js";
 import { initTheme } from "../src/modes/interactive/theme/theme.js";
 
 function renderLastLine(container: Container, width = 120): string {
@@ -12,6 +12,20 @@ function renderLastLine(container: Container, width = 120): string {
 function renderAll(container: Container, width = 120): string {
 	return container.children.flatMap((child) => child.render(width)).join("\n");
 }
+
+describe("isVersionNewer", () => {
+	test("returns false when registry version is older despite suffix differences", () => {
+		expect(isVersionNewer("0.57.1-cwilson613.2", "0.58.1-cwilson613.1")).toBe(false);
+	});
+
+	test("returns true when registry version is newer", () => {
+		expect(isVersionNewer("0.58.1-cwilson613.2", "0.58.1-cwilson613.1")).toBe(true);
+	});
+
+	test("returns false for identical numeric versions", () => {
+		expect(isVersionNewer("0.58.1-cwilson613.1", "0.58.1-cwilson613.1")).toBe(false);
+	});
+});
 
 describe("InteractiveMode.showStatus", () => {
 	beforeAll(() => {

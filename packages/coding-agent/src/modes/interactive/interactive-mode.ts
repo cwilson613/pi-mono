@@ -78,6 +78,28 @@ import { DynamicBorder } from "./components/dynamic-border.js";
 import { ExtensionEditorComponent } from "./components/extension-editor.js";
 import { ExtensionInputComponent } from "./components/extension-input.js";
 import { ExtensionSelectorComponent } from "./components/extension-selector.js";
+
+function parseVersionParts(version: string): number[] {
+	const matches = version.match(/\d+/g);
+	if (!matches) return [];
+	return matches.map((part) => Number.parseInt(part, 10));
+}
+
+export function isVersionNewer(candidateVersion: string, currentVersion: string): boolean {
+	const candidate = parseVersionParts(candidateVersion);
+	const current = parseVersionParts(currentVersion);
+	const length = Math.max(candidate.length, current.length);
+
+	for (let i = 0; i < length; i += 1) {
+		const candidatePart = candidate[i] ?? 0;
+		const currentPart = current[i] ?? 0;
+		if (candidatePart > currentPart) return true;
+		if (candidatePart < currentPart) return false;
+	}
+
+	return false;
+}
+
 import { FooterComponent } from "./components/footer.js";
 import { appKey, appKeyHint, editorKey, keyHint, rawKeyHint } from "./components/keybinding-hints.js";
 import { LoginDialogComponent } from "./components/login-dialog.js";
@@ -583,7 +605,7 @@ export class InteractiveMode {
 			const data = (await response.json()) as { version?: string };
 			const latestVersion = data.version;
 
-			if (latestVersion && latestVersion !== this.version) {
+			if (latestVersion && isVersionNewer(latestVersion, this.version)) {
 				return latestVersion;
 			}
 

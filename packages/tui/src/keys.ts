@@ -803,7 +803,12 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 				if (_kittyProtocolActive) {
 					return data === "\x1b\r" || data === "\n";
 				}
-				return false;
+				// \x1b\n — Windows Terminal configured with sendInput \u001b\r over SSH.
+				// The TTY line discipline in the SSH pipeline converts \r to \n, so the
+				// sequence arrives as ESC + newline rather than ESC + carriage return.
+				// This is a non-Kitty fallback: \x1b\r is already claimed by alt+enter in
+				// legacy mode (see below), but \x1b\n is unambiguously shift+enter here.
+				return data === "\x1b\n";
 			}
 			if (alt && !ctrl && !shift) {
 				// CSI u sequences (standard Kitty protocol)

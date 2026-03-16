@@ -302,7 +302,7 @@ export async function loginAnthropic(options: {
 				}
 				code = parsed.code;
 				state = parsed.state ?? verifier;
-				redirectUriForExchange = MANUAL_REDIRECT_URI;
+				redirectUriForExchange = manualInput.includes("localhost") ? REDIRECT_URI : MANUAL_REDIRECT_URI;
 			}
 
 			if (!code) {
@@ -317,7 +317,7 @@ export async function loginAnthropic(options: {
 					}
 					code = parsed.code;
 					state = parsed.state ?? verifier;
-					redirectUriForExchange = MANUAL_REDIRECT_URI;
+					redirectUriForExchange = manualInput.includes("localhost") ? REDIRECT_URI : MANUAL_REDIRECT_URI;
 				}
 			}
 		} else {
@@ -340,7 +340,7 @@ export async function loginAnthropic(options: {
 			}
 			code = parsed.code;
 			state = parsed.state ?? verifier;
-			redirectUriForExchange = MANUAL_REDIRECT_URI;
+			redirectUriForExchange = input.includes("localhost") ? REDIRECT_URI : MANUAL_REDIRECT_URI;
 		}
 
 		if (!code) {
